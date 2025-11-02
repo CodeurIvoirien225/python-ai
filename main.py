@@ -7,7 +7,7 @@ from surveillance import BehaviorAnalyzer
 import signal
 import sys
 import aiohttp
-
+import os
 
 class AISurveillanceServer:
     def __init__(self):
@@ -113,11 +113,11 @@ async def main():
     try:
         async with websockets.serve(
             server.handle_video_stream,
-            "localhost",
-            8765,
+            host="0.0.0.0",  # écoute sur toutes les interfaces
+            port=int(os.environ.get("PORT", 8765)),  # Replit définit automatiquement PORT
             ping_interval=20,
             ping_timeout=10,
-            max_size=2_000_000  # ~2MB par message
+            max_size=2_000_000
         ):
             print("🚀 Serveur IA démarré sur ws://localhost:8765")
             print("📡 En attente de connexions clients...")
