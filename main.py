@@ -106,6 +106,7 @@ def signal_handler(sig, frame):
     print("\n🛑 Arrêt du serveur IA...")
     sys.exit(0)
 
+PORT = int(os.environ.get("PORT", 8000))
 
 async def main():
     server = AISurveillanceServer()
@@ -114,12 +115,12 @@ async def main():
         async with websockets.serve(
             server.handle_video_stream,
             host="0.0.0.0",  # écoute sur toutes les interfaces
-            port=int(os.environ.get("PORT", 8765)),  # Replit définit automatiquement PORT
+            PORT,
             ping_interval=20,
             ping_timeout=10,
             max_size=2_000_000
         ):
-            print("🚀 Serveur IA démarré sur ws://localhost:8765")
+            print(f"🚀 Serveur IA démarré sur ws://0.0.0.0:{PORT}")
             print("📡 En attente de connexions clients...")
             await asyncio.Future()  # garde le serveur actif
     except Exception as e:
