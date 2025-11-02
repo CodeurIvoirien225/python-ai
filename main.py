@@ -9,7 +9,6 @@ import sys
 import aiohttp
 import time
 import os
-from aiohttp import web  # ✅ Ajouté pour compatibilité Render
 
 # --- Fonction utilitaire pour rendre JSON serializable ---
 def make_json_serializable(obj):
@@ -45,7 +44,7 @@ class AISurveillanceServer:
         try:
             async for message in websocket:
                 try:
-                    # --- Message JSON d'initialisation ---
+                    # --- JSON init ---
                     if isinstance(message, str):
                         data = json.loads(message)
                         if data.get('type') == 'init' and 'employee_id' in data:
@@ -72,13 +71,9 @@ class AISurveillanceServer:
                         score = analysis_serializable.get('credibility_score', 100)
 
                         self.scores_per_client.setdefault(websocket, []).append(score)
-
                         asyncio.create_task(
                             self.safe_send(websocket, json.dumps(analysis_serializable))
                         )
-
-                    else:
-                        print("⚠️ Données texte ignorées (attendu: binaire JPEG)")
 
                 except Exception as e:
                     print(f"❌ Erreur traitement frame: {e}")
@@ -86,18 +81,14 @@ class AISurveillanceServer:
 
         except websockets.exceptions.ConnectionClosed:
             print(f"🔌 Client déconnecté: {websocket.remote_address}")
-        except Exception as e:
-            print(f"❌ Erreur connexion: {e}")
         finally:
             await self.cleanup_client(websocket)
 
     async def safe_send(self, websocket, message):
         try:
             await websocket.send(message)
-        except websockets.exceptions.ConnectionClosed:
+        except Exception:
             pass
-        except Exception as e:
-            print(f"❌ Erreur envoi message: {e}")
 
     async def cleanup_client(self, websocket):
         final_score = None
@@ -108,16 +99,15 @@ class AISurveillanceServer:
                 print(f"📊 Score final de crédibilité: {final_score}")
 
         employee_id = self.employee_ids.pop(websocket, None)
-        if final_score is not None and employee_id is not None:
+        if final_score and employee_id:
             asyncio.create_task(self.send_score_to_backend(final_score, employee_id))
-        elif final_score is not None:
-            print("⚠️ Impossible d’envoyer le score : employee_id manquant")
 
         self.clients.discard(websocket)
         self.last_frame_time.pop(websocket, None)
 
     async def send_score_to_backend(self, score, employee_id):
-        url = "http://localhost/Recrutement/recruitment-app/backend-php/save_credibility_score.php"
+        # ⚠️ Remplace cette URL par celle de ton backend hébergé
+        url = "https://ton-backend-php-url/save_credibility_score.php"
         payload = {"employee_id": employee_id, "score_de_credibilite": round(score)}
 
         async with aiohttp.ClientSession() as session:
@@ -126,46 +116,35 @@ class AISurveillanceServer:
                     if resp.status == 200:
                         print(f"✅ Score enregistré pour employee_id={employee_id}")
                     else:
-                        print(f"❌ Erreur enregistrement score: HTTP {resp.status}")
+                        print(f"❌ Erreur HTTP {resp.status} lors de l'envoi")
             except Exception as e:
-                print(f"❌ Exception lors de l’envoi au backend: {e}")
+                print(f"❌ Exception lors de l’envoi: {e}")
 
 
-# ✅ Route HTTP de test pour Render
-async def healthcheck(request):
-    return web.Response(text="✅ Serveur IA opérationnel sur Render")
+def signal_handler(sig, frame):
+    print("\n🛑 Arrêt du serveur IA...")
+    sys.exit(0)
 
 
-# ✅ Démarrage combiné WebSocket + HTTP
 async def main():
     port = int(os.environ.get("PORT", 8765))
     server = AISurveillanceServer(max_fps=10)
 
-    # Lancer HTTP (pour Render)
-    app = web.Application()
-    app.add_routes([web.get("/", healthcheck)])
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-
-    # Lancer le WebSocket en parallèle
-    asyncio.create_task(
-        websockets.serve(
-            server.handle_video_stream,
-            "0.0.0.0",
-            port,
-            ping_interval=30,
-            ping_timeout=30,
-            max_size=5_000_000,
-        )
-    )
-
-    print(f"🚀 Serveur IA lancé sur Render (port {port})")
-    await asyncio.Event().wait()
+    print(f"🚀 Démarrage du serveur WebSocket sur le port {port}...")
+    async with websockets.serve(
+        server.handle_video_stream,
+        host="0.0.0.0",
+        port=port,
+        ping_interval=30,
+        ping_timeout=30,
+        max_size=5_000_000,
+    ):
+        print(f"✅ Serveur IA prêt sur ws://0.0.0.0:{port}")
+        await asyncio.Future()  # bloque indéfiniment
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal_handler)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
