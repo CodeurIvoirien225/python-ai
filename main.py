@@ -8,6 +8,7 @@ import signal
 import sys
 import aiohttp
 import time
+import os
 
 # --- Fonction utilitaire pour rendre JSON serializable ---
 def make_json_serializable(obj):
@@ -134,13 +135,15 @@ def signal_handler(sig, frame):
     print("\n🛑 Arrêt du serveur IA...")
     sys.exit(0)
 
+port = int(os.environ.get("PORT", 8765))
+
 async def main():
     server = AISurveillanceServer(max_fps=10)
     try:
         async with websockets.serve(
             server.handle_video_stream,
-            "localhost",
-            8765,
+            "0.0.0.0",
+            port,
             ping_interval=30,
             ping_timeout=30,
             max_size=5_000_000
