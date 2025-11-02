@@ -9,6 +9,7 @@ import sys
 import aiohttp
 import time
 import os
+from aiohttp import web  # ✅ Ajouté pour compatibilité Render
 
 # --- Fonction utilitaire pour rendre JSON serializable ---
 def make_json_serializable(obj):
@@ -25,14 +26,15 @@ def make_json_serializable(obj):
     else:
         return obj
 
+
 class AISurveillanceServer:
     def __init__(self, max_fps=10):
         print("🔄 Initialisation de l'analyseur de comportement...")
         self.analyzer = BehaviorAnalyzer()
         self.clients = set()
-        self.scores_per_client = {}    # websocket -> liste des scores
-        self.employee_ids = {}         # websocket -> employee_id
-        self.last_frame_time = {}      # websocket -> timestamp dernier traitement
+        self.scores_per_client = {}
+        self.employee_ids = {}
+        self.last_frame_time = {}
         self.max_fps = max_fps
         print("✅ Serveur IA prêt")
 
@@ -56,7 +58,7 @@ class AISurveillanceServer:
                         now = time.time()
                         last_time = self.last_frame_time.get(websocket, 0)
                         if now - last_time < 1 / self.max_fps:
-                            continue  # limite fps
+                            continue
                         self.last_frame_time[websocket] = now
 
                         np_arr = np.frombuffer(message, np.uint8)
@@ -65,16 +67,15 @@ class AISurveillanceServer:
                             print("⚠️ Frame vide reçue (imdecode a échoué)")
                             continue
 
-                        # Analyse du comportement
                         analysis = self.analyzer.analyze_behavior(frame)
                         analysis_serializable = make_json_serializable(analysis)
                         score = analysis_serializable.get('credibility_score', 100)
 
-                        # Stocker score
                         self.scores_per_client.setdefault(websocket, []).append(score)
 
-                        # Envoi asynchrone pour éviter blocage
-                        asyncio.create_task(self.safe_send(websocket, json.dumps(analysis_serializable)))
+                        asyncio.create_task(
+                            self.safe_send(websocket, json.dumps(analysis_serializable))
+                        )
 
                     else:
                         print("⚠️ Données texte ignorées (attendu: binaire JPEG)")
@@ -99,7 +100,6 @@ class AISurveillanceServer:
             print(f"❌ Erreur envoi message: {e}")
 
     async def cleanup_client(self, websocket):
-        """Calculer score final et l’envoyer au backend même si client déconnecté"""
         final_score = None
         if websocket in self.scores_per_client:
             scores = self.scores_per_client.pop(websocket)
@@ -130,34 +130,42 @@ class AISurveillanceServer:
             except Exception as e:
                 print(f"❌ Exception lors de l’envoi au backend: {e}")
 
-# Gestion propre CTRL+C
-def signal_handler(sig, frame):
-    print("\n🛑 Arrêt du serveur IA...")
-    sys.exit(0)
 
-port = int(os.environ.get("PORT", 8765))
+# ✅ Route HTTP de test pour Render
+async def healthcheck(request):
+    return web.Response(text="✅ Serveur IA opérationnel sur Render")
 
+
+# ✅ Démarrage combiné WebSocket + HTTP
 async def main():
+    port = int(os.environ.get("PORT", 8765))
     server = AISurveillanceServer(max_fps=10)
-    try:
-        async with websockets.serve(
+
+    # Lancer HTTP (pour Render)
+    app = web.Application()
+    app.add_routes([web.get("/", healthcheck)])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+    # Lancer le WebSocket en parallèle
+    asyncio.create_task(
+        websockets.serve(
             server.handle_video_stream,
             "0.0.0.0",
             port,
             ping_interval=30,
             ping_timeout=30,
-            max_size=5_000_000
-        ):
-            print("🚀 Serveur IA démarré sur ws://localhost:8765")
-            print("📡 En attente de connexions clients...")
-            await asyncio.Future()  # garde serveur actif
-    except Exception as e:
-        print(f"❌ Erreur démarrage serveur: {e}")
-    finally:
-        print("🔴 Serveur arrêté")
+            max_size=5_000_000,
+        )
+    )
+
+    print(f"🚀 Serveur IA lancé sur Render (port {port})")
+    await asyncio.Event().wait()
+
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, signal_handler)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
