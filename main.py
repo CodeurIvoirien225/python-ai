@@ -128,14 +128,12 @@ async def handle_http(request):
 
 async def start_http_server(port):
     app = aiohttp.web.Application()
-    app.router.add_get("/", handle_http)
-    app.router.add_head("/", handle_http)
+    app.router.add_get("/", handle_http)  # <- GET suffit, HEAD est implicite
     runner = aiohttp.web.AppRunner(app)
     await runner.setup()
     site = aiohttp.web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     print(f"🌍 Serveur HTTP prêt sur le port {port}")
-
 
 async def main():
     port = int(os.environ.get("PORT", 10000))
