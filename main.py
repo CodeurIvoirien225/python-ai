@@ -8,7 +8,6 @@ from surveillance import BehaviorAnalyzer
 import time
 import os
 
-# --- Fonction utilitaire pour rendre JSON serializable ---
 def make_json_serializable(obj):
     if isinstance(obj, dict):
         return {k: make_json_serializable(v) for k, v in obj.items()}
@@ -47,7 +46,6 @@ class AISurveillanceServer:
                     if data.get('type') == 'init' and 'employee_id' in data:
                         self.employee_ids[ws] = data['employee_id']
                         print(f"🆔 employee_id reçu: {data['employee_id']}")
-                        continue
                 except Exception as e:
                     print(f"❌ Erreur JSON: {e}")
 
@@ -104,7 +102,6 @@ class AISurveillanceServer:
             except Exception as e:
                 print(f"❌ Exception lors de l’envoi: {e}")
 
-# --- Endpoint HTTP pour Render ---
 async def handle_http(request):
     return aiohttp.web.Response(text="✅ Serveur IA actif (Render check OK)")
 
