@@ -7,6 +7,7 @@ from surveillance import BehaviorAnalyzer
 import signal
 import sys
 import aiohttp
+import aiohttp.web
 import time
 import os
 
@@ -121,16 +122,29 @@ class AISurveillanceServer:
                 print(f"❌ Exception lors de l’envoi: {e}")
 
 
-def signal_handler(sig, frame):
-    print("\n🛑 Arrêt du serveur IA...")
-    sys.exit(0)
+# --- Serveur HTTP pour Render ---
+async def handle_http(request):
+    return aiohttp.web.Response(text="✅ Serveur IA actif (Render check OK)")
+
+async def start_http_server(port):
+    app = aiohttp.web.Application()
+    app.router.add_get("/", handle_http)
+    app.router.add_head("/", handle_http)
+    runner = aiohttp.web.AppRunner(app)
+    await runner.setup()
+    site = aiohttp.web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"🌍 Serveur HTTP prêt sur le port {port}")
 
 
 async def main():
-    port = int(os.environ.get("PORT", 8765))
+    port = int(os.environ.get("PORT", 10000))
     server = AISurveillanceServer(max_fps=10)
 
-    print(f"🚀 Démarrage du serveur WebSocket sur le port {port}...")
+    # Lancer HTTP et WebSocket sur le même port
+    await start_http_server(port)
+
+    print(f"🚀 Démarrage du serveur WebSocket sur le port {port} (Render)")
     async with websockets.serve(
         server.handle_video_stream,
         host="0.0.0.0",
@@ -139,8 +153,13 @@ async def main():
         ping_timeout=30,
         max_size=5_000_000,
     ):
-        print(f"✅ Serveur IA prêt sur ws://0.0.0.0:{port}")
+        print(f"✅ Serveur WebSocket prêt sur ws://0.0.0.0:{port}")
         await asyncio.Future()  # bloque indéfiniment
+
+
+def signal_handler(sig, frame):
+    print("\n🛑 Arrêt du serveur IA...")
+    sys.exit(0)
 
 
 if __name__ == "__main__":
