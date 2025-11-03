@@ -113,7 +113,7 @@ async def main():
     server = AISurveillanceServer(max_fps=10)
 
     app = aiohttp.web.Application()
-    app.router.add_get("/", handle_http)       # Ping HTTP
+    app.router.add_get("/", handle_http)         # Ping HTTP
     app.router.add_get("/ws", server.handle_ws)  # WebSocket endpoint
 
     runner = aiohttp.web.AppRunner(app)
