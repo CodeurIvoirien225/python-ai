@@ -105,21 +105,30 @@ class AISurveillanceServer:
 async def handle_http(request):
     return aiohttp.web.Response(text="✅ Serveur IA actif (Render check OK)")
 
+
 async def main():
     port = int(os.environ.get("PORT", 10000))
     server = AISurveillanceServer(max_fps=10)
 
+    # Application aiohttp principale
     app = aiohttp.web.Application()
-    app.router.add_get("/", handle_http)         # Ping HTTP
-    app.router.add_get("/ws", server.handle_ws)  # WebSocket endpoint
 
+    # Route de santé (Render ping ici avec HEAD)
+    app.router.add_get("/", handle_http)
+    app.router.add_head("/", handle_http)
+
+    # Endpoint WebSocket
+    app.router.add_get("/ws", server.handle_ws)
+
+    # Lancer le serveur sur le port exposé
     runner = aiohttp.web.AppRunner(app)
     await runner.setup()
     site = aiohttp.web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
     print(f"🌍 Serveur HTTP + WebSocket prêt sur le port {port}")
-    await asyncio.Future()  # bloque indéfiniment
+    await asyncio.Future()  # boucle infinie pour ne pas quitter
+    
 
 if __name__ == "__main__":
     try:
